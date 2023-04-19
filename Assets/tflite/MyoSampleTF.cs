@@ -3,15 +3,15 @@ using System.IO;
 using TensorFlowLite;
 using UnityEngine;
 
-public class MyoSample : MonoBehaviour
+public class MyoSampleTF : MonoBehaviour
 {
     [SerializeField, FilePopup("*.tflite")] string fileName = "model_hu_2022_correct.tflite";
     
     public OVRsEMGHandModifier _handModifierR;
-    MyoClassification myoClassification;
+    MyoClassificationTF _myoClassificationTf;
 
-    List<float[]> myoDataQueue = new(MyoClassification.SEQ_LEN);
-    float[,,] emgTensor = new float[1, MyoClassification.SEQ_LEN, MyoClassification.INPUT_DIM];
+    List<float[]> myoDataQueue = new(MyoClassificationTF.SEQ_LEN);
+    float[,,] emgTensor = new float[1, MyoClassificationTF.SEQ_LEN, MyoClassificationTF.INPUT_DIM];
     
     private bool inferenceActive = true;
     
@@ -33,7 +33,7 @@ public class MyoSample : MonoBehaviour
     void Awake()
     {
         string modelPath = Path.Combine(Application.streamingAssetsPath, fileName);
-        myoClassification = new MyoClassification(modelPath);
+        _myoClassificationTf = new MyoClassificationTF(modelPath);
         
         OVRPlugin.systemDisplayFrequency = 100.0f;
         Application.targetFrameRate = 100;
@@ -54,9 +54,9 @@ public class MyoSample : MonoBehaviour
                 foreach (string line in csv_lines)
                 {
                     string[] values = line.Split(',');
-                    float[] emgReading = new float[MyoClassification.INPUT_DIM];
+                    float[] emgReading = new float[MyoClassificationTF.INPUT_DIM];
                     // Read EMG data
-                    for(int i = 0; i < MyoClassification.INPUT_DIM; i++)
+                    for(int i = 0; i < MyoClassificationTF.INPUT_DIM; i++)
                     {
                         emgReading[i] = float.Parse(values[i]);
                     }
@@ -84,7 +84,7 @@ public class MyoSample : MonoBehaviour
                     return;
             
                 EnqueueEMGReading(ThalmicMyo.emg);
-                if (myoDataQueue.Count == MyoClassification.SEQ_LEN)
+                if (myoDataQueue.Count == MyoClassificationTF.SEQ_LEN)
                 {
                     QueueToTensors();
                     RunInference(emgTensor);
@@ -96,7 +96,7 @@ public class MyoSample : MonoBehaviour
                 
                 EnqueueEMGReading(csvData);
                 QueueToTensors();
-                if(myoDataQueue.Count == MyoClassification.SEQ_LEN)
+                if(myoDataQueue.Count == MyoClassificationTF.SEQ_LEN)
                     RunInference(emgTensor);
 
                 csvDataCounter++;
@@ -122,13 +122,13 @@ public class MyoSample : MonoBehaviour
 
     void OnDestroy()
     {
-        myoClassification?.Dispose();
+        _myoClassificationTf?.Dispose();
     }
 
     public void RunInference(float[,,] emgTensor)
     {
-        myoClassification.Invoke(emgTensor);
-        var resultValues = myoClassification.resultValues;
+        _myoClassificationTf.Invoke(emgTensor);
+        var resultValues = _myoClassificationTf.resultValues;
         
         // Debug.Log(resultValues[0] + " " + resultValues[1] + " " + resultValues[2] + " " + resultValues[3] + " " + resultValues[4] + " " + resultValues[5] + " " + resultValues[6] + " " + resultValues[7]);
         
@@ -138,15 +138,15 @@ public class MyoSample : MonoBehaviour
     private void EnqueueEMGReading(int[] emgReading)
     {
         // Convert emgReading to float[]
-        float[] emgReadingFloat = new float[MyoClassification.INPUT_DIM];
-        for (int i = 0; i < MyoClassification.INPUT_DIM; i++)
+        float[] emgReadingFloat = new float[MyoClassificationTF.INPUT_DIM];
+        for (int i = 0; i < MyoClassificationTF.INPUT_DIM; i++)
         {
             emgReadingFloat[i] = emgReading[i];
         }
         myoDataQueue.Add(emgReadingFloat);
 
         // If we have reached SEQ_LEN readings, remove the oldest one, but not SOS token
-        if (myoDataQueue.Count > MyoClassification.SEQ_LEN)
+        if (myoDataQueue.Count > MyoClassificationTF.SEQ_LEN)
             // myoDataQueue.RemoveAt(1);
             myoDataQueue.RemoveAt(0);
     }
@@ -156,7 +156,7 @@ public class MyoSample : MonoBehaviour
         // Convert emgReading to float[]
         myoDataQueue.Add(emgReading);
         // If we have reached SEQ_LEN readings, remove the oldest one, but not SOS token
-        if (myoDataQueue.Count > MyoClassification.SEQ_LEN)
+        if (myoDataQueue.Count > MyoClassificationTF.SEQ_LEN)
             myoDataQueue.RemoveAt(0);
     }
     
@@ -166,7 +166,7 @@ public class MyoSample : MonoBehaviour
         int i = 0;
         foreach (var reading in myoDataQueue)
         {
-            for (int j = 0; j < MyoClassification.INPUT_DIM; j++)
+            for (int j = 0; j < MyoClassificationTF.INPUT_DIM; j++)
             {
                 emgTensor[0, i, j] = reading[j];
             }
@@ -222,7 +222,7 @@ public class MyoSample : MonoBehaviour
             Debug.Log("Inference " + (inferenceActive ? "deactivated" : "activated") + ".");
             inferenceActive = !inferenceActive;
             
-            myoClassification.Dispose();
+            _myoClassificationTf.Dispose();
         }
     }
 }

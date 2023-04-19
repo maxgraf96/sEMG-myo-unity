@@ -1,11 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using TensorFlowLite;
 using UnityEngine;
 // using NWaves.Filters;
 
-public class MyoClassification : IDisposable
+public class MyoClassificationTF : IDisposable
 {
     public static readonly int SEQ_LEN = 100;
     // public static readonly int TGT_LEN = 100;
@@ -24,7 +23,7 @@ public class MyoClassification : IDisposable
 
     InterpreterOptions options;
 
-    public MyoClassification(string modelPath)
+    public MyoClassificationTF(string modelPath)
     {
         #if UNITY_EDITOR
         options = CreateOptions(0);

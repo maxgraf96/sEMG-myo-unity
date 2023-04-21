@@ -1507,6 +1507,7 @@ GameObject:
   - component: {fileID: 1326121268}
   - component: {fileID: 1326121270}
   - component: {fileID: 1326121269}
+  - component: {fileID: 1326121271}
   m_Layer: 0
   m_Name: ONNX
   m_TagString: Untagged
@@ -1565,6 +1566,18 @@ MonoBehaviour:
   _handModifierR: {fileID: 1141554055}
   _sourceHandL: {fileID: 1943078936}
   _sourceHandR: {fileID: 1943078935}
+--- !u!114 &1326121271
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1326121266}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cc4529d0b1c5be744ab3edd9699d97be, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1001 &1384014393
 PrefabInstance:
   m_ObjectHideFlags: 0

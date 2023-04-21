@@ -37,8 +37,8 @@ public class MyoClassification : MonoBehaviour
     public void Start()
     {
         BetterStreamingAssets.Initialize();
-        // var modelBytes = BetterStreamingAssets.ReadAllBytes("model_hu_2022_rnn.onnx");
-        var modelBytes = BetterStreamingAssets.ReadAllBytes("model_hu_2022_rnn_big.onnx");
+        // var modelBytes = BetterStreamingAssets.ReadAllBytes("model_hu_2022_rnn_big.onnx");
+        var modelBytes = BetterStreamingAssets.ReadAllBytes("model_hu_2022_rnn_big_finetuned.onnx");
         var options = new SessionOptions();
         session = new InferenceSession(modelBytes, options);
         

@@ -36,7 +36,8 @@ public class MyoSample : MonoBehaviour
         DataCollection // Collect data for finetuning
     }
     
-    Mode mode = Mode.DataCollection;
+    // Mode mode = Mode.DataCollection;
+    Mode mode = Mode.RealInference;
     
     
     // Data collection fields
@@ -76,10 +77,26 @@ public class MyoSample : MonoBehaviour
                 Debug.Log("Loaded " + csvEMGData.Count + " EMG samples.");
                 break;
             case Mode.DataCollection:
+                // Subscribe to hand updated events from Oculus hand data
+                OVRHand.HandStateUpdatedEvent.AddListener(OnHandStateUpdated);
+                // Enable pose updates to the rendered virtual hands move correctly
                 _sourceHandL.InjectOptionalUpdateRootPose(true);
                 _sourceHandR.InjectOptionalUpdateRootPose(true);
+                // Subscribe to our custom recording toggle event
+                ButtonControls.RecordingButtonToggledEvent.AddListener(OnRecordingButtonToggled);
                 break;
         }
+    }
+
+    private bool isRecordingData;
+    private void OnRecordingButtonToggled(bool isRecording)
+    {
+        isRecordingData = isRecording;
+        if(isRecording)
+            GetComponent<Finetuning>().StartRecording();
+        else
+            GetComponent<Finetuning>().StopRecording();
+        
     }
 
     private void Start()
@@ -161,12 +178,15 @@ public class MyoSample : MonoBehaviour
                 }
                 break;
             case Mode.DataCollection:
+                if(!isRecordingData)
+                    return;
+                
                 var emgData = ThalmicMyo.emg;
                 // Check data for null
                 if(emgData == null || emgData.Length < 8)
                     return;
                 
-                
+                GetComponent<Finetuning>().AddReadings(emgData, lastOVRReading);
                 
                 break;
                 
@@ -280,6 +300,7 @@ public class MyoSample : MonoBehaviour
         }
     }
     
+    private float[] lastOVRReading = new float[MyoClassification.OUTPUT_DIM];
     private void OnHandStateUpdated(OVRPlugin.Quatf[] rotations)
     {
         float[] angleReading = new float[MyoClassification.OUTPUT_DIM];
@@ -301,6 +322,7 @@ public class MyoSample : MonoBehaviour
                 counter++;
             }
         }
+        lastOVRReading = angleReading;
     }
     
     

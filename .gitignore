@@ -6,6 +6,10 @@
 *.csv
 *.nupkg
 *.dll
+*.onnx
+*.onnx.meta
+*.ort
+*.ort.meta
 
 Assets/Oculus
 

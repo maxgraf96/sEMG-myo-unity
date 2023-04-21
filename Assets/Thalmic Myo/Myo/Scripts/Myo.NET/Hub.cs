@@ -96,7 +96,7 @@ namespace Thalmic.Myo
             {
                 GCHandle gch = GCHandle.Alloc(this);
 
-                libmyo.run(_handle, 1000, (libmyo.Handler)HandleEvent, (IntPtr)gch, IntPtr.Zero);
+                libmyo.run(_handle, 10, (libmyo.Handler)HandleEvent, (IntPtr)gch, IntPtr.Zero);
             }
         }
 

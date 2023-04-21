@@ -89,6 +89,7 @@ public class ThalmicMyo : MonoBehaviour {
     }
 
     public int[] Update() {
+    // public void Update() {
         lock (_lock) {      // The lock keyword ensures that one thread does not enter a critical section of code while another thread is in the critical section.
             armSynced = _myoArmSynced;
             arm = _myoArm;
@@ -190,6 +191,7 @@ public class ThalmicMyo : MonoBehaviour {
                 _myo.PoseChange -= myo_OnPoseChange;
                 _myo.Unlocked -= myo_OnUnlock;
                 _myo.Locked -= myo_OnLock;
+                _myo.EmgData -= myo_OnEmgData;
             }
             _myo = value;
             if (value != null) {
@@ -201,6 +203,7 @@ public class ThalmicMyo : MonoBehaviour {
                 value.PoseChange += myo_OnPoseChange;
                 value.Unlocked += myo_OnUnlock;
                 value.Locked += myo_OnLock;
+                value.EmgData += myo_OnEmgData;
             }
         }
     }

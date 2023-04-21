@@ -10,6 +10,8 @@ using UnityEngine;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using Debug = UnityEngine.Debug;
+using NWaves.Filters;
+using NWaves.Filters.Butterworth;
 
 public class ONNXInference : MonoBehaviour
 {
@@ -25,20 +27,15 @@ public class ONNXInference : MonoBehaviour
 
         private static Tensor<float> inputTensor;
         private static List<NamedOnnxValue> inputs;
-        
 
         public static void DoWork()
         {
             BetterStreamingAssets.Initialize();
             // var modelBytes = BetterStreamingAssets.ReadAllBytes("model_hu_2022_rnn_opt.onnx");
             var modelBytes = BetterStreamingAssets.ReadAllBytes("model_hu_2022_rnn.with_runtime_opt.ort");
-        
             var options = new SessionOptions();
-        
             session = new InferenceSession(modelBytes, options);
-            // session = new InferenceSession(modelPath);
-            // Debug.Log("ONNX Session created");
-        
+
             // Create a tensor with the shape of the input
             inputTensor = new DenseTensor<float>(new[] { 1, 100, 8 });
             // Fill the tensor with some data

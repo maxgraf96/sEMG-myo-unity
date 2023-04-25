@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 
 public class Finetuning : MonoBehaviour
@@ -34,20 +35,21 @@ public class Finetuning : MonoBehaviour
             return;
         }
         // Save the data to a csv file
-        string csv = "EMG1,EMG2,EMG3,EMG4,EMG5,EMG6,EMG7,EMG8,FingerJoint1,FingerJoint2,FingerJoint3,FingerJoint4,FingerJoint5,FingerJoint6,FingerJoint7,FingerJoint8\n";
+        StringBuilder sb = new StringBuilder("EMG1,EMG2,EMG3,EMG4,EMG5,EMG6,EMG7,EMG8,FingerJoint1,FingerJoint2,FingerJoint3,FingerJoint4,FingerJoint5,FingerJoint6,FingerJoint7,FingerJoint8\n");
         for (int i = 0; i < emgReadings.Count; i++)
         {
             for (int j = 0; j < emgReadings[i].Length; j++)
             {
-                csv += emgReadings[i][j] + ",";
+                sb.Append(emgReadings[i][j] + ",");
             }
             for (int j = 0; j < fingerJointReadings[i].Length; j++)
             {
-                csv += fingerJointReadings[i][j] + ",";
+                sb.Append(fingerJointReadings[i][j] + ",");
             }
-            csv += "\n";
+            sb.Append("\n");
         }
-        System.IO.File.WriteAllText("Assets/ONNX/finetuning_data.csv", csv);
+        
+        System.IO.File.WriteAllText("Assets/ONNX/finetuning_data.csv", sb.ToString());
     }
 
     public void AddReadings(int[] emg, float[] fingerJoints)

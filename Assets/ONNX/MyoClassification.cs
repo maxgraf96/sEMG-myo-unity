@@ -14,16 +14,19 @@ using Debug = UnityEngine.Debug;
 
 public class MyoClassification : MonoBehaviour
 {
-    public static readonly int SEQ_LEN = 50;
-    public static readonly int TGT_LEN = 50;
+    public static readonly int SEQ_LEN = 100;
+    public static readonly int FEATURE_LEN = 6;
+    public static readonly int TGT_LEN = 1;
     public static readonly int INPUT_DIM = 8;
     public static readonly int OUTPUT_DIM = 8;
+    public static readonly int INPUT_TENSOR_LEN = FEATURE_LEN + SEQ_LEN + 1;
+    
     
     public float[] resultValues = new float[8];
 
     private List<float[]> output = new();
     
-    float[,,] inputs = new float[1, SEQ_LEN, INPUT_DIM];
+    float[,,] inputs = new float[1, FEATURE_LEN, INPUT_DIM];
 
     static ConcurrentQueue<DenseTensor<float>> inputQ = new();
     public static ConcurrentQueue<DenseTensor<float>> outputQ = new();
@@ -37,48 +40,46 @@ public class MyoClassification : MonoBehaviour
     public void Start()
     {
         BetterStreamingAssets.Initialize();
-        // var modelBytes = BetterStreamingAssets.ReadAllBytes("model_hu_2022_rnn_big.onnx");
-        var modelBytes = BetterStreamingAssets.ReadAllBytes("model_hu_2022_rnn_big_finetuned.onnx");
-        var options = new SessionOptions();
-        session = new InferenceSession(modelBytes, options);
-        
-        // Create a tensor with the shape of the input
-        inputTensor = new DenseTensor<float>(new[] { 1, SEQ_LEN, 8 });
-        onnxInputs = new List<NamedOnnxValue>
-        {
-            NamedOnnxValue.CreateFromTensor("input", inputTensor)
-        };
+        // var modelBytes = BetterStreamingAssets.ReadAllBytes("model_hu_2022_rnn_big_finetuned.onnx");
+        // var options = new SessionOptions();
+        // session = new InferenceSession(modelBytes, options);
+        //
+        // // Create a tensor with the shape of the input
+        // inputTensor = new DenseTensor<float>(new[] { 1, INPUT_TENSOR_LEN, 8 });
+        // onnxInputs = new List<NamedOnnxValue>
+        // {
+        //     NamedOnnxValue.CreateFromTensor("input", inputTensor)
+        // };
     }
 
     public MyoClassification()
     {
-        // Thread thread = new Thread(ThreadWork.DoWork);
-        // thread.Start();
+        Thread thread = new Thread(ThreadWork.DoWork);
+        thread.Start();
     }
 
     public void Invoke()
     {
         // Convert input tensor to ONNX tensor
-        // var onnxInput = new DenseTensor<float>(new int[] { 1, SEQ_LEN, INPUT_DIM });
-        for (int i = 0; i < SEQ_LEN; i++)
+        var onnxInput = new DenseTensor<float>(new[] { 1, INPUT_TENSOR_LEN, INPUT_DIM });
+        for (int i = 0; i < INPUT_TENSOR_LEN; i++)
         {
             for (int j = 0; j < INPUT_DIM; j++)
             {
-                inputTensor[0, i, j] = MyoSample.emgTensor[0, i, j];
+                // inputTensor[0, i, j] = MyoSample.inputTensor[0, i, j];
+                onnxInput[0, i, j] = MyoSample.inputTensor[0, i, j];
             }
         }
         
-        using var output = session.Run(onnxInputs);
-        var outputData = output.First().AsTensor<float>();
-        // var clone = (DenseTensor<float>) outputData.Clone();
-        
-        for(int i = 0; i < OUTPUT_DIM; i++)
-        {
-            var value = outputData[0, TGT_LEN - 1, i];
-            resultValues[i] = value;
-        }
+        // using var output = session.Run(onnxInputs);
+        // var outputData = output.First().AsTensor<float>();
+        // for(int i = 0; i < OUTPUT_DIM; i++)
+        // {
+        //     var value = outputData[0, TGT_LEN - 1, i];
+        //     resultValues[i] = value;
+        // }
 
-        // inputQ.Enqueue(onnxInput);
+        inputQ.Enqueue(onnxInput);
     }
 
     private void Update()
@@ -89,35 +90,24 @@ public class MyoClassification : MonoBehaviour
         //     if (!gotResult)
         //         continue;
         //     
-        //     int numOutputSamples = 1;
-        //     // Add copy of output_temp to outputs
         //     output.Add(new float[OUTPUT_DIM]);
-        //     for (int sample = 0; sample < numOutputSamples; sample++)
-        //     {
-        //         for (int i = 0; i < OUTPUT_DIM; i++)
-        //         {
-        //             // Get last "output_dim" values of outputArray
-        //             var value = outputTensor[0, TGT_LEN - sample - 1, i];
-        //             output[^1][i] += value;
-        //         }
-        //     }
         //     for(int i = 0; i < OUTPUT_DIM; i++)
         //     {
-        //         output[^1][i] /= numOutputSamples;
-        //         resultValues[i] = output[^1][i];
+        //         var value = outputTensor[0, 0, i];
+        //         output[^1][i] = value;
+        //         resultValues[i] = value;
         //     }
-        //     
         //     
         //     if(output.Count > TGT_LEN)
         //         output.RemoveAt(0);
         // }
         
         // FPS stuff
-        // while (fpsQueue.Count > 0)
-        // {
-        //     fpsQueue.TryDequeue(out var fps);
-        //     Debug.Log("FPS: " + fps);
-        // }
+        while (fpsQueue.Count > 0)
+        {
+            fpsQueue.TryDequeue(out var fps);
+            Debug.Log("FPS: " + fps);
+        }
     }
     
     public class ThreadWork
@@ -129,29 +119,19 @@ public class MyoClassification : MonoBehaviour
         public static void DoWork()
         {
             BetterStreamingAssets.Initialize();
-            // var modelBytes = BetterStreamingAssets.ReadAllBytes("model_hu_2022_rnn.onnx");
-            var modelBytes = BetterStreamingAssets.ReadAllBytes("model_hu_2022_rnn_big.onnx");
+            var modelBytes = BetterStreamingAssets.ReadAllBytes("model_hu_2022_rnn_big_finetuned.onnx");
             var options = new SessionOptions();
             session = new InferenceSession(modelBytes, options);
         
             // Create a tensor with the shape of the input
-            inputTensor = new DenseTensor<float>(new[] { 1, SEQ_LEN, 8 });
+            inputTensor = new DenseTensor<float>(new[] { 1, INPUT_TENSOR_LEN, INPUT_DIM });
             inputs = new List<NamedOnnxValue>
             {
                 NamedOnnxValue.CreateFromTensor("input", inputTensor)
             };
             
             Stopwatch stopwatch = new Stopwatch();
-            
-            // var fs = 100.0f;
-            // var lowCut = 10.0f / fs;
-            // var highCut = 40.0f / fs;
-            // var filterOrder = 2;
-            // BandPassFilter butter = new BandPassFilter(lowCut, highCut, filterOrder);
-            // // LowPassFilter butter = new LowPassFilter(40.0 / fs, filterOrder);
-            // List<DiscreteSignal> rawSignals = new List<DiscreteSignal>();
-            // List<DiscreteSignal> filteredSignals = new List<DiscreteSignal>();
-            
+
             while (true)
             {
                 // Check if new input is available
@@ -159,38 +139,9 @@ public class MyoClassification : MonoBehaviour
                 {
                     // Take time using C#
                     stopwatch.Restart();
-                    
-                    // // Filter samples
-                    // rawSignals.Clear();
-                    // filteredSignals.Clear();
-                    //
-                    // for (int channel = 0; channel < 8; channel++)
-                    // {
-                    //     float[] samples = new float[SEQ_LEN];
-                    //     for (int j = 0; j < SEQ_LEN; j++)
-                    //     {
-                    //         samples[j] = input[0, j, channel];
-                    //     }
-                    //     var signal = new DiscreteSignal((int) fs, samples);
-                    //     rawSignals.Add(signal);
-                    // }
-                    //
-                    // foreach (var signal in rawSignals)
-                    // {
-                    //     filteredSignals.Add(butter.ApplyTo(signal));
-                    // }
-                    //
-                    // // Fill the tensor with filtered signal data
-                    // for(int channel = 0; channel < 8; channel++)
-                    // {
-                    //     for (int i = 0; i < SEQ_LEN; i++)
-                    //     {
-                    //         inputTensor[0, i, channel] = filteredSignals[channel].Samples[i];
-                    //     }
-                    // }
-                    
+
                     // Without filtering
-                    for (int i = 0; i < SEQ_LEN; i++)
+                    for (int i = 0; i < INPUT_TENSOR_LEN; i++)
                     {
                         for (int j = 0; j < 8; j++)
                         {
@@ -212,7 +163,7 @@ public class MyoClassification : MonoBehaviour
                 else
                 {
                     // Debug.Log("No input");
-                    // Thread.Sleep(1);
+                    Thread.Sleep(1);
                     continue;
                 }
             }

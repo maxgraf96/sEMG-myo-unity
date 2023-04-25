@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEngine;
 using NWaves.Filters.Butterworth;
 using NWaves.Signals;
@@ -13,7 +14,10 @@ public class MyoSample : MonoBehaviour
     public OVRsEMGHandModifier _handModifierR;
 
     List<float[]> myoDataQueue = new(MyoClassification.SEQ_LEN);
-    public static float[,,] emgTensor = new float[1, MyoClassification.SEQ_LEN, MyoClassification.INPUT_DIM];
+    // Bandpassed
+    List<float[]> myoDataQueueFiltered = new(MyoClassification.SEQ_LEN);
+    
+    public static float[,,] inputTensor = new float[1, MyoClassification.INPUT_TENSOR_LEN, MyoClassification.INPUT_DIM];
     
     private bool inferenceActive = true;
     
@@ -36,27 +40,39 @@ public class MyoSample : MonoBehaviour
         DataCollection // Collect data for finetuning
     }
     
-    // Mode mode = Mode.DataCollection;
-    Mode mode = Mode.RealInference;
+    Mode mode = Mode.DataCollection;
+    // Mode mode = Mode.RealInference;
     
     
     // Data collection fields
     public HandVisual _sourceHandL;
     public HandVisual _sourceHandR;
     
+    static int fs = 100;
+    float lowCut = 20.0f / fs;
+    float highCut = 25.0f / fs;
+    int filterOrder = 4;
+    private BandPassFilter butter;
+    
     
     void Awake()
     {
-        OVRPlugin.systemDisplayFrequency = 100.0f;
-        Application.targetFrameRate = 100;
+        OVRPlugin.systemDisplayFrequency = 120.0f;
+        Application.targetFrameRate = 120;
 
         BetterStreamingAssets.Initialize();
+        
+        butter = new BandPassFilter(lowCut, highCut, filterOrder);
+        for(int channel = 0; channel < MyoClassification.SEQ_LEN; channel++)
+        {
+            myoDataQueueFiltered.Add(new float[MyoClassification.INPUT_DIM]);
+        }
 
         switch (mode)
         {
             case Mode.RealInference:
                 // Subscribe to Oculus hand update event
-                // OVRHand.HandStateUpdatedEvent.AddListener(OnHandStateUpdated);
+                OVRHand.HandStateUpdatedEvent.AddListener(OnHandStateUpdated);
                 break;
             case Mode.SimInference:
                 // Load RawEMG-2023-03-22-13.15.34-predicted.csv from streamingAssets
@@ -133,17 +149,17 @@ public class MyoSample : MonoBehaviour
                     return;
                 
                 // Check if data is the same as previous
-                if(prevSame(data))
-                    return;
+                // if(prevSame(data))
+                    // return;
                 
                 // Debug.Log(data[0]);
                 EnqueueEMGReading(ThalmicMyo.emg);
                 if (myoDataQueue.Count == MyoClassification.SEQ_LEN)
                 {
                     QueueToTensors();
-                    if (counterSwitch)
-                        RunInference();
-                    counterSwitch = !counterSwitch;
+                    // if (counterSwitch)
+                    RunInference();
+                    // counterSwitch = !counterSwitch;
                 }
                 prevEMG = data;
                 break;
@@ -200,65 +216,62 @@ public class MyoSample : MonoBehaviour
         _myoClassification.Invoke();
         var resultValues = _myoClassification.resultValues;
         
-        // if (rawSamples.Count > 0 && Math.Abs(rawSamples[0][^1] - resultValues[0]) < 0.01f)
-            // return;
+        while(MyoClassification.outputQ.Count > 0)
+        {
+            bool gotResult = MyoClassification.outputQ.TryDequeue(out var outputTensor);
+            if (!gotResult)
+                continue;
+            
+            for (int i = 0; i < MyoClassification.OUTPUT_DIM; i++)
+            {
+                // Get last "output_dim" values of outputArray
+                var value = outputTensor[0, MyoClassification.TGT_LEN - 1, i];
+                resultValues[i] = value;
+            }
+            
+            // // Add to discrete signal
+            // if (rawSamples.Count == 0)
+            // {
+            //     for (int i = 0; i < 8; i++)
+            //     {
+            //         rawSamples.Add(i, new List<float>());
+            //         filteredSignalsDict.Add(i, new DiscreteSignal(100, new float[MyoClassification.TGT_LEN]));
+            //     }
+            // }
+            //
+            // // Add results to raw samples
+            // for (int i = 0; i < 8; i++)
+            // {
+            //     rawSamples[i].Add(resultValues[i]);
+            //     if (rawSamples[i].Count > MyoClassification.TGT_LEN)
+            //         rawSamples[i].RemoveAt(0);
+            // }
+            // warmupCounter += 1;
+            // if (warmupCounter < MyoClassification.TGT_LEN)
+            //     return;
+            //
+            // // Convert raw samples to discrete signal
+            // foreach (var key in rawSamples.Keys)
+            // {
+            //     for (int i = 0; i < MyoClassification.TGT_LEN; i++)
+            //     {
+            //         filteredSignalsDict[key].Samples[i] = rawSamples[key][i];
+            //     }
+            //     var filteredSignal = lowPass.ApplyTo(filteredSignalsDict[key]);
+            //     filteredSignalsDict[key] = filteredSignal;
+            // }
+            //
+            // // Get last 8 samples from filteredSignals
+            // for (int i = 0; i < 8; i++)
+            // {
+            //     resultValues[i] = filteredSignalsDict[i].Samples[^1];
+            // }
         
-        // while(MyoClassification.outputQ.Count > 0)
-        // {
-        //     bool gotResult = MyoClassification.outputQ.TryDequeue(out var outputTensor);
-        //     if (!gotResult)
-        //         continue;
-        //     
-        //     for (int i = 0; i < MyoClassification.OUTPUT_DIM; i++)
-        //     {
-        //         // Get last "output_dim" values of outputArray
-        //         var value = outputTensor[0, MyoClassification.TGT_LEN - 1, i];
-        //         resultValues[i] = value;
-        //     }
-        //     
-        //     // Add to discrete signal
-        //     if (rawSamples.Count == 0)
-        //     {
-        //         for (int i = 0; i < 8; i++)
-        //         {
-        //             rawSamples.Add(i, new List<float>());
-        //             filteredSignalsDict.Add(i, new DiscreteSignal(100, new float[MyoClassification.TGT_LEN]));
-        //         }
-        //     }
-        //
-        //     // Add results to raw samples
-        //     for (int i = 0; i < 8; i++)
-        //     {
-        //         rawSamples[i].Add(resultValues[i]);
-        //         if (rawSamples[i].Count > MyoClassification.TGT_LEN)
-        //             rawSamples[i].RemoveAt(0);
-        //     }
-        //     warmupCounter += 1;
-        //     if (warmupCounter < MyoClassification.TGT_LEN)
-        //         return;
-        //
-        //     // Convert raw samples to discrete signal
-        //     foreach (var key in rawSamples.Keys)
-        //     {
-        //         for (int i = 0; i < MyoClassification.TGT_LEN; i++)
-        //         {
-        //             filteredSignalsDict[key].Samples[i] = rawSamples[key][i];
-        //         }
-        //         var filteredSignal = lowPass.ApplyTo(filteredSignalsDict[key]);
-        //         filteredSignalsDict[key] = filteredSignal;
-        //     }
-        //
-        //     // Get last 8 samples from filteredSignals
-        //     for (int i = 0; i < 8; i++)
-        //     {
-        //         resultValues[i] = filteredSignalsDict[i].Samples[^1];
-        //     }
-        //
-        //     _handModifierR.UpdateJointData(resultValues);
-        // }
+            _handModifierR.UpdateJointData(resultValues);
+        }
         
         
-        _handModifierR.UpdateJointData(resultValues);
+        // _handModifierR.UpdateJointData(resultValues);
         
     }
 
@@ -288,18 +301,107 @@ public class MyoSample : MonoBehaviour
     
     private void QueueToTensors()
     {
-        // Convert input queue to tensor
+        FilterEMGQueue();
+        // Extract features
+        ExtractFeatures();
+        for(int feature = 0; feature < MyoClassification.FEATURE_LEN; feature++)
+        {
+            for(int j = 0; j < MyoClassification.INPUT_DIM; j++)
+            {
+                if (feature == 0)
+                    inputTensor[0, feature, j] = _features.mav[j];
+                else if (feature == 1)
+                    inputTensor[0, feature, j] = _features.rms[j];
+                else if (feature == 2)
+                    inputTensor[0, feature, j] = _features.variances[j];
+                else if (feature == 3)
+                    inputTensor[0, feature, j] = _features.mdf[j];
+                else if (feature == 4)
+                    inputTensor[0, feature, j] = _features.mnf[j];
+                else if (feature == 5)
+                    inputTensor[0, feature, j] = _features.pf[j];
+            }
+                
+        }
+        
+        // Add filtered sEMG samples to tensor
         int i = 0;
-        foreach (var reading in myoDataQueue)
+        foreach (var reading in myoDataQueueFiltered)
         {
             for (int j = 0; j < MyoClassification.INPUT_DIM; j++)
             {
-                emgTensor[0, i, j] = reading[j];
+                inputTensor[0, MyoClassification.FEATURE_LEN + i, j] = reading[j];
             }
             i++;
         }
+        
+        // Add last angle reading to tensor
+        for (int j = 0; j < MyoClassification.INPUT_DIM; j++)
+        {
+            inputTensor[0, MyoClassification.INPUT_TENSOR_LEN - 1, j] = lastOVRReading[j];
+        }
     }
-    
+
+    struct Features {
+        public float[] mav;
+        public float[] rms;
+        public float[] variances;
+        public float[] mdf;
+        public float[] mnf;
+        public float[] pf;
+    }
+
+    private Features _features;
+    private void ExtractFeatures()
+    {
+        // Channel-wise, get mean absolute values, RMS and variance
+        var mav = new float[MyoClassification.INPUT_DIM];
+        var rms = new float[MyoClassification.INPUT_DIM];
+        var variances = new float[MyoClassification.INPUT_DIM];
+        var mdf = new float[MyoClassification.INPUT_DIM];
+        var mnf = new float[MyoClassification.INPUT_DIM];
+        var pf = new float[MyoClassification.INPUT_DIM];
+        for (int channel = 0; channel < MyoClassification.INPUT_DIM; channel++)
+        {
+            var channelData = myoDataQueueFiltered.Select(x => x[channel]).ToArray();
+
+            // Time domain features
+            mav[channel] = channelData.Average(x => Math.Abs(x));
+            rms[channel] = (float) Math.Sqrt(channelData.Average(x => x * x));
+            variances[channel] = channelData.Sum(x => x * x) / (MyoClassification.SEQ_LEN - 1);
+            
+            // Frequency domain features
+            double[] psd = FeatureExtractor.PowerSpectralDensity(channelData);
+            mdf[channel] = FeatureExtractor.MedianFrequency(psd);
+            mnf[channel] = FeatureExtractor.MeanFrequency(psd);
+            pf[channel] = FeatureExtractor.PeakFrequency(psd);
+        }
+        _features.mav = mav;
+        _features.rms = rms;
+        _features.variances = variances;
+        _features.mdf = mdf;
+        _features.mnf = mnf;
+        _features.pf = pf;
+    }
+
+    /// <summary>
+    /// Take all the samples in the MyoDataQueue and apply a band pass filter to them
+    /// </summary>
+    private void FilterEMGQueue()
+    {
+        
+        for (int channel = 0; channel < MyoClassification.INPUT_DIM; channel++)
+        {
+            DiscreteSignal signal = new DiscreteSignal(fs, myoDataQueue.Select(x => x[channel]).ToArray());
+            var filChannelSig = butter.ApplyTo(signal);
+            for (int i = 0; i < MyoClassification.SEQ_LEN; i++)
+            {
+                // TODO This might be bad
+                myoDataQueueFiltered[i][channel] = filChannelSig.Samples[i];
+            }
+        }
+    }
+
     private float[] lastOVRReading = new float[MyoClassification.OUTPUT_DIM];
     private void OnHandStateUpdated(OVRPlugin.Quatf[] rotations)
     {

@@ -6,8 +6,10 @@ using UnityEngine.Events;
 public class ButtonControls : MonoBehaviour
 {
     public GameObject _recordingButton;
+    public GameObject _handSyncButton;
     
     public static UnityEvent<bool> RecordingButtonToggledEvent = new();
+    public static UnityEvent<bool> HandSyncButtonToggledEvent = new();
     
     void Start()
     {
@@ -20,6 +22,7 @@ public class ButtonControls : MonoBehaviour
     }
 
     private bool recBtnState;
+    private bool hsBtnState;
     public void RecordingButtonToggled()
     {
         recBtnState = !recBtnState;
@@ -28,5 +31,14 @@ public class ButtonControls : MonoBehaviour
             .InjectOptionalNormalColorState(new InteractableColorVisual.ColorState() {Color = recBtnState ? new Color(1.0f, 0f, 0f, 0.5f) : new Color(1.0f, 1.0f, 1.0f, 0.08f)});
 
         RecordingButtonToggledEvent.Invoke(recBtnState);
+    }
+    
+    public void HandSyncButtonToggled()
+    {
+        hsBtnState = !hsBtnState;
+        _handSyncButton.GetComponentInChildren<InteractableColorVisual>()
+            .InjectOptionalNormalColorState(new InteractableColorVisual.ColorState() {Color = hsBtnState ? new Color(0.0f, 1f, 0f, 0.5f) : new Color(1.0f, 1.0f, 1.0f, 0.08f)});
+
+        HandSyncButtonToggledEvent.Invoke(hsBtnState);
     }
 }

@@ -44,7 +44,7 @@ public class MyoSampleTF : MonoBehaviour
         {
             case Mode.RealInference:
                 // Subscribe to Oculus hand update event
-                OVRHand.HandStateUpdatedEvent.AddListener(OnHandStateUpdated);
+                // OVRHand.HandStateUpdatedEvent.AddListener(OnHandStateUpdated);
                 break;
             case Mode.SimInference:
                 // Load RawEMG-2023-03-22-13.15.34-predicted.csv from streamingAssets

@@ -6,17 +6,24 @@ using UnityEngine;
 using NWaves.Filters.Butterworth;
 using NWaves.Signals;
 using Oculus.Interaction;
+using UnityEngine.Serialization;
 using LowPassFilter = NWaves.Filters.Butterworth.LowPassFilter;
 
 public class MyoSample : MonoBehaviour
 {
     private MyoClassification _myoClassification;
-    public OVRsEMGHandModifier _handModifierR;
+    // Visualisation hand that doesn't follow Oculus tracking, just for demo purposes of produced joint angle data
+    [FormerlySerializedAs("_handModifierR")] public OVRsEMGHandModifier _visHandModifierR;
 
+    // When hands are synced, we activate this hand modifier, which is attached to the virtual hand that actually
+    // follows Oculus tracking, overwriting just the joint angles we produce
+    public OVRsEMGHandModifier _realHandModifierR;
+
+    // Raw EMG data
     List<float[]> myoDataQueue = new(MyoClassification.SEQ_LEN);
-    // Bandpassed
+    // Placeholder for bandpassed EMG data
     List<float[]> myoDataQueueFiltered = new(MyoClassification.SEQ_LEN);
-    
+    // Input tensor for ONNX model
     public static float[,,] inputTensor = new float[1, MyoClassification.INPUT_TENSOR_LEN, MyoClassification.INPUT_DIM];
     
     private bool inferenceActive = true;
@@ -28,9 +35,9 @@ public class MyoSample : MonoBehaviour
     private int csvDataCounter = 0;
 
 
-    private LowPassFilter lowPass = new LowPassFilter(0.25f, 4);
-    Dictionary<int, List<float>> rawSamples = new();
-    Dictionary<int, DiscreteSignal> filteredSignalsDict = new();
+    private LowPassFilter lowPassFilterOutputAngles = new LowPassFilter(0.2f, 6);
+    Dictionary<int, List<float>> rawOutputAngles = new();
+    Dictionary<int, DiscreteSignal> filteredOutputAngles = new();
 
     enum  Mode
     {
@@ -40,8 +47,8 @@ public class MyoSample : MonoBehaviour
         DataCollection // Collect data for finetuning
     }
     
-    Mode mode = Mode.DataCollection;
-    // Mode mode = Mode.RealInference;
+    // Mode mode = Mode.DataCollection;
+    Mode mode = Mode.RealInference;
     
     
     // Data collection fields
@@ -57,16 +64,22 @@ public class MyoSample : MonoBehaviour
     
     void Awake()
     {
+        // Set target FPS
         OVRPlugin.systemDisplayFrequency = 120.0f;
         Application.targetFrameRate = 120;
 
+        // Set up BetterStreamingAssets
         BetterStreamingAssets.Initialize();
         
+        // Set up band pass filter for raw EMG filtering
         butter = new BandPassFilter(lowCut, highCut, filterOrder);
         for(int channel = 0; channel < MyoClassification.SEQ_LEN; channel++)
         {
             myoDataQueueFiltered.Add(new float[MyoClassification.INPUT_DIM]);
         }
+        
+        // Subscribe to button events
+        ButtonControls.HandSyncButtonToggledEvent.AddListener(OnHandSyncButtonToggled);
 
         switch (mode)
         {
@@ -102,6 +115,11 @@ public class MyoSample : MonoBehaviour
                 ButtonControls.RecordingButtonToggledEvent.AddListener(OnRecordingButtonToggled);
                 break;
         }
+    }
+
+    private void OnHandSyncButtonToggled(bool shouldHandsSync)
+    {
+        _realHandModifierR.enabled = shouldHandsSync;
     }
 
     private bool isRecordingData;
@@ -229,45 +247,48 @@ public class MyoSample : MonoBehaviour
                 resultValues[i] = value;
             }
             
-            // // Add to discrete signal
-            // if (rawSamples.Count == 0)
-            // {
-            //     for (int i = 0; i < 8; i++)
-            //     {
-            //         rawSamples.Add(i, new List<float>());
-            //         filteredSignalsDict.Add(i, new DiscreteSignal(100, new float[MyoClassification.TGT_LEN]));
-            //     }
-            // }
-            //
-            // // Add results to raw samples
-            // for (int i = 0; i < 8; i++)
-            // {
-            //     rawSamples[i].Add(resultValues[i]);
-            //     if (rawSamples[i].Count > MyoClassification.TGT_LEN)
-            //         rawSamples[i].RemoveAt(0);
-            // }
-            // warmupCounter += 1;
-            // if (warmupCounter < MyoClassification.TGT_LEN)
-            //     return;
-            //
-            // // Convert raw samples to discrete signal
-            // foreach (var key in rawSamples.Keys)
-            // {
-            //     for (int i = 0; i < MyoClassification.TGT_LEN; i++)
-            //     {
-            //         filteredSignalsDict[key].Samples[i] = rawSamples[key][i];
-            //     }
-            //     var filteredSignal = lowPass.ApplyTo(filteredSignalsDict[key]);
-            //     filteredSignalsDict[key] = filteredSignal;
-            // }
-            //
-            // // Get last 8 samples from filteredSignals
-            // for (int i = 0; i < 8; i++)
-            // {
-            //     resultValues[i] = filteredSignalsDict[i].Samples[^1];
-            // }
+            // Add to discrete signal
+            if (rawOutputAngles.Count == 0)
+            {
+                for (int i = 0; i < 8; i++)
+                {
+                    rawOutputAngles.Add(i, new List<float>());
+                    filteredOutputAngles.Add(i, new DiscreteSignal(100, new float[MyoClassification.SEQ_LEN]));
+                }
+            }
+            
+            // Add results to raw samples
+            for (int i = 0; i < 8; i++)
+            {
+                rawOutputAngles[i].Add(resultValues[i]);
+                if (rawOutputAngles[i].Count > MyoClassification.SEQ_LEN)
+                    rawOutputAngles[i].RemoveAt(0);
+            }
+            warmupCounter += 1;
+            if (warmupCounter < MyoClassification.SEQ_LEN)
+                return;
+            
+            // Convert raw samples to discrete signal
+            foreach (var jointIndex in rawOutputAngles.Keys)
+            {
+                for (int i = 0; i < MyoClassification.SEQ_LEN; i++)
+                {
+                    filteredOutputAngles[jointIndex].Samples[i] = rawOutputAngles[jointIndex][i];
+                }
+                var filteredSignal = lowPassFilterOutputAngles.ApplyTo(filteredOutputAngles[jointIndex]);
+                filteredOutputAngles[jointIndex] = filteredSignal;
+            }
+            
+            // Get last 8 samples from filteredSignals
+            for (int i = 0; i < 8; i++)
+            {
+                resultValues[i] = filteredOutputAngles[i].Samples[^1];
+            }
         
-            _handModifierR.UpdateJointData(resultValues);
+            _visHandModifierR.UpdateJointData(resultValues);
+            
+            if(_realHandModifierR.enabled)
+                _realHandModifierR.UpdateJointData(resultValues);
         }
         
         
@@ -403,8 +424,11 @@ public class MyoSample : MonoBehaviour
     }
 
     private float[] lastOVRReading = new float[MyoClassification.OUTPUT_DIM];
-    private void OnHandStateUpdated(OVRPlugin.Quatf[] rotations)
+    private void OnHandStateUpdated(OVRPlugin.Quatf[] rotations, OVRHand.Hand hand)
     {
+        if(hand != OVRHand.Hand.HandRight)
+            return;
+        
         float[] angleReading = new float[MyoClassification.OUTPUT_DIM];
         var counter = 0;
         for (int i = 0; i < 30; i++)

@@ -14,7 +14,7 @@ using Debug = UnityEngine.Debug;
 
 public class MyoClassification : MonoBehaviour
 {
-    public static readonly int SEQ_LEN = 100;
+    public static readonly int SEQ_LEN = 70;
     public static readonly int FEATURE_LEN = 6;
     public static readonly int TGT_LEN = 1;
     public static readonly int INPUT_DIM = 8;
@@ -106,7 +106,7 @@ public class MyoClassification : MonoBehaviour
         while (fpsQueue.Count > 0)
         {
             fpsQueue.TryDequeue(out var fps);
-            Debug.Log("FPS: " + fps);
+            // Debug.Log("FPS: " + fps);
         }
     }
     

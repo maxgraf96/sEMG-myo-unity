@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Microsoft.ML.OnnxRuntime.Tensors;
 using UnityEngine;
 using NWaves.Filters.Butterworth;
 using NWaves.Signals;
@@ -32,7 +33,8 @@ public class MyoSample : MonoBehaviour
 
     List<float[]> csvEMGData = new();
     List<float[]> csvAngleData = new();
-    private int csvDataCounter = 0;
+    private int csvEMGDataCounter = 0;
+    private int csvAngleDataCounter = 0;
 
 
     private LowPassFilter lowPassFilterOutputAngles = new LowPassFilter(0.2f, 6);
@@ -48,7 +50,8 @@ public class MyoSample : MonoBehaviour
     }
     
     // Mode mode = Mode.DataCollection;
-    Mode mode = Mode.RealInference;
+    // Mode mode = Mode.RealInference;
+    Mode mode = Mode.SimInference;
     
     
     // Data collection fields
@@ -60,6 +63,12 @@ public class MyoSample : MonoBehaviour
     float highCut = 25.0f / fs;
     int filterOrder = 4;
     private BandPassFilter butter;
+
+    // For simulated inference - whether we are visualising the "true" values (coming from python -> ONNX pipeline)
+    // or the values produced by the Unity -> ONNX pipeline
+    private bool isSiminferenceGT = false;
+    // private int numGTPredictions = 635;
+    private int numGTPredictions = 12065;
     
     
     void Awake()
@@ -88,20 +97,30 @@ public class MyoSample : MonoBehaviour
                 OVRHand.HandStateUpdatedEvent.AddListener(OnHandStateUpdated);
                 break;
             case Mode.SimInference:
-                // Load RawEMG-2023-03-22-13.15.34-predicted.csv from streamingAssets
-                // string csv_path = Path.Combine(Application.streamingAssetsPath, "RawEMG-2023-03-22-13.15.34-predicted.csv");
-                // string csv_path = Path.Combine(Application.streamingAssetsPath, "hu_2022_sample.csv");
-                string[] csv_lines = BetterStreamingAssets.ReadAllLines("tcn_samples.csv");
+                // string[] csv_lines = BetterStreamingAssets.ReadAllLines("finetuned_onnx_test.csv");
+                string[] csv_lines = BetterStreamingAssets.ReadAllLines("finetuned_onnx_train.csv");
+                int counter = 0;
                 foreach (string line in csv_lines)
                 {
                     string[] values = line.Split(',');
-                    float[] emgReading = new float[MyoClassification.INPUT_DIM];
-                    // Read EMG data
+                    float[] reading = new float[MyoClassification.INPUT_DIM];
+                    // Read data - if counter is less than numPredictions, we are reading the EMG data
+                    // Otherwise, we are reading the angle data
                     for(int i = 0; i < MyoClassification.INPUT_DIM; i++)
                     {
-                        emgReading[i] = float.Parse(values[i]);
+                        reading[i] = float.Parse(values[i]);
                     }
-                    csvEMGData.Add(emgReading);
+
+                    if (counter < numGTPredictions * MyoClassification.SEQ_LEN)
+                    {
+                        csvEMGData.Add(reading);
+                    }
+                    else
+                    {
+                        csvAngleData.Add(reading);
+                    }
+                    
+                    counter++;
                 }
                 Debug.Log("Loaded " + csvEMGData.Count + " EMG samples.");
                 break;
@@ -113,6 +132,9 @@ public class MyoSample : MonoBehaviour
                 _sourceHandR.InjectOptionalUpdateRootPose(true);
                 // Subscribe to our custom recording toggle event
                 ButtonControls.RecordingButtonToggledEvent.AddListener(OnRecordingButtonToggled);
+                break;
+            case Mode.Playback:
+                string[] csv_l = BetterStreamingAssets.ReadAllLines(".csv");
                 break;
         }
     }
@@ -138,19 +160,6 @@ public class MyoSample : MonoBehaviour
         _myoClassification = GetComponent<MyoClassification>();
     }
 
-    private bool prevSame(int[] newEMG)
-    {
-        for(int i = 0; i < MyoClassification.INPUT_DIM; i++)
-        {
-            if(newEMG[i] != prevEMG[i])
-                return false;
-        }
-        return true;
-    }
-
-
-    bool counterSwitch = false;
-    int[] prevEMG = new int[MyoClassification.INPUT_DIM];
     private void Update()
     {
         KeyListener();
@@ -165,49 +174,69 @@ public class MyoSample : MonoBehaviour
                 // Check data for null
                 if(data == null || data.Length < 8)
                     return;
-                
-                // Check if data is the same as previous
-                // if(prevSame(data))
-                    // return;
-                
-                // Debug.Log(data[0]);
+
                 EnqueueEMGReading(ThalmicMyo.emg);
                 if (myoDataQueue.Count == MyoClassification.SEQ_LEN)
                 {
                     QueueToTensors();
-                    // if (counterSwitch)
                     RunInference();
-                    // counterSwitch = !counterSwitch;
                 }
-                prevEMG = data;
                 break;
             
             case Mode.SimInference:
-                var csvData = csvEMGData[csvDataCounter];
-                
-                EnqueueEMGReading(csvData);
-                QueueToTensors();
-                if(myoDataQueue.Count == MyoClassification.SEQ_LEN)
-                    RunInference();
-
-                if (counterSwitch)
-                    csvDataCounter += 1;
-                counterSwitch = !counterSwitch;
-                
-                if (csvDataCounter >= csvEMGData.Count)
+                if (isSiminferenceGT)
                 {
-                    csvDataCounter = 0;
-                    Debug.Log("Loop");
+                    // Take angle readings from csv
+                    var csvData = csvAngleData[csvAngleDataCounter];
+                    
+                    var gtOutputTensor = new DenseTensor<float>(new[] { 1, MyoClassification.TGT_LEN, MyoClassification.OUTPUT_DIM });
+                    for (int i = 0; i < MyoClassification.TGT_LEN; i++)
+                    {
+                        for (int j = 0; j < MyoClassification.OUTPUT_DIM; j++)
+                        {
+                            gtOutputTensor[0, i, j] = csvData[j];
+                        }
+                    }
+                    
+                    MyoClassification.outputQ.Enqueue(gtOutputTensor);
+                    HandleOutputQueue();
+
+                    csvAngleDataCounter++;
+                    if (csvAngleDataCounter >= csvAngleData.Count)
+                    {
+                        csvAngleDataCounter = 0;
+                        Debug.Log("Loop");
+                    }
                 }
+                else
+                {
+                    var csvData = csvEMGData[csvEMGDataCounter];
+                
+                    EnqueueEMGReading(csvData);
+                    if (myoDataQueue.Count == MyoClassification.SEQ_LEN)
+                    {
+                        QueueToTensors();
+                        RunInference();
+                    }
+
+                    csvEMGDataCounter += 1;
+                
+                    if (csvEMGDataCounter >= csvEMGData.Count)
+                    {
+                        csvEMGDataCounter = 0;
+                        Debug.Log("Loop");
+                    }
+                }
+                
                 break;
             
             case Mode.Playback:
                 // Load data from csv list
-                csvDataCounter += 1;
+                csvEMGDataCounter += 1;
                 // Loop
-                if (csvDataCounter >= csvEMGData.Count)
+                if (csvEMGDataCounter >= csvEMGData.Count)
                 {
-                    csvDataCounter = 0;
+                    csvEMGDataCounter = 0;
                     Debug.Log("Loop");
                 }
                 break;
@@ -228,12 +257,15 @@ public class MyoSample : MonoBehaviour
     }
 
     private int warmupCounter = 0;
-    float[] lastResultValues = new float[8];
     public void RunInference()
     {
         _myoClassification.Invoke();
-        var resultValues = _myoClassification.resultValues;
-        
+        HandleOutputQueue();
+    }
+
+    private void HandleOutputQueue()
+    {
+        float[] resultValues = new float[MyoClassification.OUTPUT_DIM];
         while(MyoClassification.outputQ.Count > 0)
         {
             bool gotResult = MyoClassification.outputQ.TryDequeue(out var outputTensor);
@@ -290,10 +322,6 @@ public class MyoSample : MonoBehaviour
             if(_realHandModifierR.enabled)
                 _realHandModifierR.UpdateJointData(resultValues);
         }
-        
-        
-        // _handModifierR.UpdateJointData(resultValues);
-        
     }
 
     private void EnqueueEMGReading(int[] emgReading)
@@ -315,7 +343,7 @@ public class MyoSample : MonoBehaviour
     {
         // Convert emgReading to float[]
         myoDataQueue.Add(emgReading);
-        // If we have reached SEQ_LEN readings, remove the oldest one, but not SOS token
+        // If we have reached SEQ_LEN readings, remove the oldest one
         if (myoDataQueue.Count > MyoClassification.SEQ_LEN)
             myoDataQueue.RemoveAt(0);
     }
@@ -389,7 +417,8 @@ public class MyoSample : MonoBehaviour
             // Time domain features
             mav[channel] = channelData.Average(x => Math.Abs(x));
             rms[channel] = (float) Math.Sqrt(channelData.Average(x => x * x));
-            variances[channel] = channelData.Sum(x => x * x) / (MyoClassification.SEQ_LEN - 1);
+            // Variance
+            variances[channel] = (float) channelData.Select(x => Math.Pow(x - channelData.Average(), 2)).Sum() / (channelData.Length - 1);
             
             // Frequency domain features
             double[] psd = FeatureExtractor.PowerSpectralDensity(channelData);
@@ -468,6 +497,16 @@ public class MyoSample : MonoBehaviour
         {
             Debug.Log("Inference " + (inferenceActive ? "deactivated" : "activated") + ".");
             inferenceActive = !inferenceActive;
+        }
+        else if (Input.GetKeyDown(KeyCode.S))
+        {
+            isSiminferenceGT = !isSiminferenceGT;
+            if(isSiminferenceGT)
+                csvAngleDataCounter = 0;
+            else 
+                csvEMGDataCounter = 0;
+            string newGTMode = isSiminferenceGT ? "Python ONNX" : "Unity ONNX";
+            Debug.Log("Switched to " + newGTMode + ".");
         }
     }
 }

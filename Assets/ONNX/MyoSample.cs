@@ -7,6 +7,9 @@ using UnityEngine;
 using NWaves.Filters.Butterworth;
 using NWaves.Signals;
 using Oculus.Interaction;
+using ONNX;
+using Python.Runtime;
+using UnityEditor.Scripting.Python;
 using UnityEngine.Serialization;
 using LowPassFilter = NWaves.Filters.Butterworth.LowPassFilter;
 
@@ -67,8 +70,8 @@ public class MyoSample : MonoBehaviour
     // For simulated inference - whether we are visualising the "true" values (coming from python -> ONNX pipeline)
     // or the values produced by the Unity -> ONNX pipeline
     private bool isSiminferenceGT = false;
-    // private int numGTPredictions = 635;
-    private int numGTPredictions = 12065;
+    private int numGTPredictions = 635;
+    // private int numGTPredictions = 12065;
     
     
     void Awake()
@@ -89,7 +92,20 @@ public class MyoSample : MonoBehaviour
         
         // Subscribe to button events
         ButtonControls.HandSyncButtonToggledEvent.AddListener(OnHandSyncButtonToggled);
-
+        
+        
+        PythonRunner.EnsureInitialized();
+        using (Py.GIL()) {
+            try {
+                dynamic sys = Py.Import("sys");
+                UnityEngine.Debug.Log($"python version: {sys.version}");
+            } catch(PythonException e) {
+                UnityEngine.Debug.LogException(e);
+            }
+        }
+        
+        
+        
         switch (mode)
         {
             case Mode.RealInference:
@@ -97,8 +113,8 @@ public class MyoSample : MonoBehaviour
                 OVRHand.HandStateUpdatedEvent.AddListener(OnHandStateUpdated);
                 break;
             case Mode.SimInference:
-                // string[] csv_lines = BetterStreamingAssets.ReadAllLines("finetuned_onnx_test.csv");
-                string[] csv_lines = BetterStreamingAssets.ReadAllLines("finetuned_onnx_train.csv");
+                string[] csv_lines = BetterStreamingAssets.ReadAllLines("finetuned_onnx_test.csv");
+                // string[] csv_lines = BetterStreamingAssets.ReadAllLines("finetuned_onnx_train.csv");
                 int counter = 0;
                 foreach (string line in csv_lines)
                 {

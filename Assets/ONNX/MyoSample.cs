@@ -8,8 +8,6 @@ using NWaves.Filters.Butterworth;
 using NWaves.Signals;
 using Oculus.Interaction;
 using ONNX;
-using Python.Runtime;
-using UnityEditor.Scripting.Python;
 using UnityEngine.Serialization;
 using LowPassFilter = NWaves.Filters.Butterworth.LowPassFilter;
 
@@ -28,7 +26,8 @@ public class MyoSample : MonoBehaviour
     // Placeholder for bandpassed EMG data
     List<float[]> myoDataQueueFiltered = new(MyoClassification.SEQ_LEN);
     // Input tensor for ONNX model
-    public static float[,,] inputTensor = new float[1, MyoClassification.INPUT_TENSOR_LEN, MyoClassification.INPUT_DIM];
+    // public static float[,,] inputTensor = new float[1, MyoClassification.INPUT_TENSOR_LEN, MyoClassification.INPUT_DIM];
+    public static float[][] inputTensor = new float[MyoClassification.INPUT_TENSOR_LEN][];
     
     private bool inferenceActive = true;
     
@@ -92,20 +91,7 @@ public class MyoSample : MonoBehaviour
         
         // Subscribe to button events
         ButtonControls.HandSyncButtonToggledEvent.AddListener(OnHandSyncButtonToggled);
-        
-        
-        PythonRunner.EnsureInitialized();
-        using (Py.GIL()) {
-            try {
-                dynamic sys = Py.Import("sys");
-                UnityEngine.Debug.Log($"python version: {sys.version}");
-            } catch(PythonException e) {
-                UnityEngine.Debug.LogException(e);
-            }
-        }
-        
-        
-        
+
         switch (mode)
         {
             case Mode.RealInference:
@@ -195,7 +181,7 @@ public class MyoSample : MonoBehaviour
                 if (myoDataQueue.Count == MyoClassification.SEQ_LEN)
                 {
                     QueueToTensors();
-                    RunInference();
+                    _myoClassification.Invoke();
                 }
                 break;
             
@@ -232,7 +218,8 @@ public class MyoSample : MonoBehaviour
                     if (myoDataQueue.Count == MyoClassification.SEQ_LEN)
                     {
                         QueueToTensors();
-                        RunInference();
+                        _myoClassification.Invoke();
+                        HandleOutputQueue();
                     }
 
                     csvEMGDataCounter += 1;
@@ -273,19 +260,13 @@ public class MyoSample : MonoBehaviour
     }
 
     private int warmupCounter = 0;
-    public void RunInference()
-    {
-        _myoClassification.Invoke();
-        HandleOutputQueue();
-    }
 
     private void HandleOutputQueue()
     {
         float[] resultValues = new float[MyoClassification.OUTPUT_DIM];
         while(MyoClassification.outputQ.Count > 0)
         {
-            bool gotResult = MyoClassification.outputQ.TryDequeue(out var outputTensor);
-            if (!gotResult)
+            if(!MyoClassification.outputQ.TryDequeue(out var outputTensor))
                 continue;
             
             for (int i = 0; i < MyoClassification.OUTPUT_DIM; i++)
@@ -314,7 +295,7 @@ public class MyoSample : MonoBehaviour
             }
             warmupCounter += 1;
             if (warmupCounter < MyoClassification.SEQ_LEN)
-                return;
+                continue;
             
             // Convert raw samples to discrete signal
             foreach (var jointIndex in rawOutputAngles.Keys)
@@ -366,106 +347,7 @@ public class MyoSample : MonoBehaviour
     
     private void QueueToTensors()
     {
-        FilterEMGQueue();
-        // Extract features
-        ExtractFeatures();
-        for(int feature = 0; feature < MyoClassification.FEATURE_LEN; feature++)
-        {
-            for(int j = 0; j < MyoClassification.INPUT_DIM; j++)
-            {
-                if (feature == 0)
-                    inputTensor[0, feature, j] = _features.mav[j];
-                else if (feature == 1)
-                    inputTensor[0, feature, j] = _features.rms[j];
-                else if (feature == 2)
-                    inputTensor[0, feature, j] = _features.variances[j];
-                else if (feature == 3)
-                    inputTensor[0, feature, j] = _features.mdf[j];
-                else if (feature == 4)
-                    inputTensor[0, feature, j] = _features.mnf[j];
-                else if (feature == 5)
-                    inputTensor[0, feature, j] = _features.pf[j];
-            }
-                
-        }
-        
-        // Add filtered sEMG samples to tensor
-        int i = 0;
-        foreach (var reading in myoDataQueueFiltered)
-        {
-            for (int j = 0; j < MyoClassification.INPUT_DIM; j++)
-            {
-                inputTensor[0, MyoClassification.FEATURE_LEN + i, j] = reading[j];
-            }
-            i++;
-        }
-        
-        // Add last angle reading to tensor
-        for (int j = 0; j < MyoClassification.INPUT_DIM; j++)
-        {
-            inputTensor[0, MyoClassification.INPUT_TENSOR_LEN - 1, j] = lastOVRReading[j];
-        }
-    }
-
-    struct Features {
-        public float[] mav;
-        public float[] rms;
-        public float[] variances;
-        public float[] mdf;
-        public float[] mnf;
-        public float[] pf;
-    }
-
-    private Features _features;
-    private void ExtractFeatures()
-    {
-        // Channel-wise, get mean absolute values, RMS and variance
-        var mav = new float[MyoClassification.INPUT_DIM];
-        var rms = new float[MyoClassification.INPUT_DIM];
-        var variances = new float[MyoClassification.INPUT_DIM];
-        var mdf = new float[MyoClassification.INPUT_DIM];
-        var mnf = new float[MyoClassification.INPUT_DIM];
-        var pf = new float[MyoClassification.INPUT_DIM];
-        for (int channel = 0; channel < MyoClassification.INPUT_DIM; channel++)
-        {
-            var channelData = myoDataQueueFiltered.Select(x => x[channel]).ToArray();
-
-            // Time domain features
-            mav[channel] = channelData.Average(x => Math.Abs(x));
-            rms[channel] = (float) Math.Sqrt(channelData.Average(x => x * x));
-            // Variance
-            variances[channel] = (float) channelData.Select(x => Math.Pow(x - channelData.Average(), 2)).Sum() / (channelData.Length - 1);
-            
-            // Frequency domain features
-            double[] psd = FeatureExtractor.PowerSpectralDensity(channelData);
-            mdf[channel] = FeatureExtractor.MedianFrequency(psd);
-            mnf[channel] = FeatureExtractor.MeanFrequency(psd);
-            pf[channel] = FeatureExtractor.PeakFrequency(psd);
-        }
-        _features.mav = mav;
-        _features.rms = rms;
-        _features.variances = variances;
-        _features.mdf = mdf;
-        _features.mnf = mnf;
-        _features.pf = pf;
-    }
-
-    /// <summary>
-    /// Take all the samples in the MyoDataQueue and apply a band pass filter to them
-    /// </summary>
-    private void FilterEMGQueue()
-    {
-        
-        for (int channel = 0; channel < MyoClassification.INPUT_DIM; channel++)
-        {
-            DiscreteSignal signal = new DiscreteSignal(fs, myoDataQueue.Select(x => x[channel]).ToArray());
-            var filChannelSig = butter.ApplyTo(signal);
-            for (int i = 0; i < MyoClassification.SEQ_LEN; i++)
-            {
-                // TODO This might be bad
-                myoDataQueueFiltered[i][channel] = filChannelSig.Samples[i];
-            }
-        }
+        inputTensor = myoDataQueue.ToArray();
     }
 
     private float[] lastOVRReading = new float[MyoClassification.OUTPUT_DIM];
@@ -519,8 +401,14 @@ public class MyoSample : MonoBehaviour
             isSiminferenceGT = !isSiminferenceGT;
             if(isSiminferenceGT)
                 csvAngleDataCounter = 0;
-            else 
+            else
+            {
                 csvEMGDataCounter = 0;
+                myoDataQueue.Clear();
+                
+                warmupCounter = 0;
+                rawOutputAngles.Clear();
+            }
             string newGTMode = isSiminferenceGT ? "Python ONNX" : "Unity ONNX";
             Debug.Log("Switched to " + newGTMode + ".");
         }

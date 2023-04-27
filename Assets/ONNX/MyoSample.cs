@@ -7,7 +7,6 @@ using UnityEngine;
 using NWaves.Filters.Butterworth;
 using NWaves.Signals;
 using Oculus.Interaction;
-using ONNX;
 using UnityEngine.Serialization;
 using LowPassFilter = NWaves.Filters.Butterworth.LowPassFilter;
 

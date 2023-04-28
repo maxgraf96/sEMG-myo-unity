@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text;
@@ -5,21 +6,29 @@ using UnityEngine;
 
 public class Finetuning : MonoBehaviour
 {
-    private List<int[]> emgReadings = new();
+    private List<float[]> emgReadings = new();
     private List<float[]> fingerJointReadings = new();
+    private bool isRecording = false;
+    private float[] lastOVRReading;
+
+    private void Start()
+    {
+        OVRHand.HandStateUpdatedEvent.AddListener(OnHandStateUpdated);
+    }
+
+    public void ToggleRecording()
+    {
+        isRecording = !isRecording;
+        if (isRecording)
+        {
+            StartRecording();
+        }
+        else
+        {
+            StopRecording();
+        }
+    }
     
-    // Start is called before the first frame update
-    void Start()
-    {
-        
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
-        
-    }
-
     public void StartRecording()
     {
         emgReadings.Clear();
@@ -52,9 +61,52 @@ public class Finetuning : MonoBehaviour
         System.IO.File.WriteAllText("Assets/ONNX/finetuning_data.csv", sb.ToString());
     }
 
-    public void AddReadings(int[] emg, float[] fingerJoints)
+    public void AddReadings(float[] emg)
     {
         emgReadings.Add(emg);
-        fingerJointReadings.Add(fingerJoints);
+        fingerJointReadings.Add(lastOVRReading);
+    }
+    
+    
+    private void OnHandStateUpdated(OVRPlugin.Quatf[] rotations, OVRHand.Hand hand)
+    {
+        if(hand != OVRHand.Hand.HandRight)
+            return;
+        
+        float[] angleReading = new float[MyoClassification.OUTPUT_DIM];
+        var counter = 0;
+        for (int i = 0; i < 30; i++)
+        {
+            if (i is
+                6 or 7 or    // Index
+                9 or 10 or   // Middle
+                12 or 13 or  // Ring
+                16 or 17     // Pinky
+               )
+            {
+                var quat = qovr2q(rotations[i]);
+                var angle = quat.eulerAngles.z;
+                if(angle > 180)
+                    angle = -360 + angle;
+                angleReading[counter] = angle;
+                counter++;
+            }
+        }
+        lastOVRReading = angleReading;
+    }
+    
+    private Quaternion qovr2q(OVRPlugin.Quatf q)
+    {
+        var result = new Quaternion();
+        result.x = q.x;
+        result.y = q.y;
+        result.z = q.z;
+        result.w = q.w;
+        return result;
+    }
+
+    public bool IsRecording()
+    {
+        return isRecording;
     }
 }

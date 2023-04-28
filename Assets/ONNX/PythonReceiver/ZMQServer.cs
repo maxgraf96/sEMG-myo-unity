@@ -5,14 +5,23 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using NetMQ;
 using NetMQ.Sockets;
+using ONNX;
 using UnityEngine;
 
 public class ZMQServer : MonoBehaviour
 {
     private ResponseSocket server;
     static ConcurrentQueue<int> queue = new();
+    
+    public bool isModeRecording;
+    
+    private Finetuning _finetuning;
+    public OVRsEMGHandModifier _visHandModifierR;
+    
     void Start()
     {
+        _finetuning = GetComponent<Finetuning>();
+        
         AsyncIO.ForceDotNet.Force();
         NetMQConfig.Linger = new TimeSpan(0,0,1);
         
@@ -25,7 +34,7 @@ public class ZMQServer : MonoBehaviour
 
     IEnumerator CoWorker()
     {
-        var wait = new WaitForSeconds(0.01f);
+        var wait = new WaitForSeconds(0.001f);
 
         while(true)
         {
@@ -34,17 +43,31 @@ public class ZMQServer : MonoBehaviour
             {
                 try
                 {
+                    // Send an response frame back to the client
+                    server.SendFrameEmpty();
+                    
                     // Unpack the bytes into a float array
                     var floatArray = UnpackFloatArray(packedData);
-
-                    // Convert the float array into a list of lists
-                    var data = ConvertToNestedList(floatArray, MyoClassification.INPUT_DIM);
-
-                    // Process the data (you can add your own logic here)
-                    var response = $"Received {data.Length} lists of floats";
-
-                    // Send the response back to the Python client
-                    server.SendFrame(response);
+                    
+                    // -------------------------------- Recording mode --------------------------------
+                    if (isModeRecording && _finetuning.IsRecording())
+                    {
+                        _finetuning.AddReadings(floatArray);
+                    }
+                    // -------------------------------- Inference mode --------------------------------
+                    else
+                    {
+                        // Inference mode
+                        // Convert the float array into a list of lists
+                        var data = floatArray;
+                        
+                        var filteredOutputAngles = AnglePostprocessor.PostProcessAngles(data);
+                        if(filteredOutputAngles != null)
+                            // Send the data to OVR Hand Tracking
+                            _visHandModifierR.UpdateJointData(filteredOutputAngles);
+                    }
+                    continue;
+                    
                 } catch (Exception e)
                 {
                     Debug.Log(e);

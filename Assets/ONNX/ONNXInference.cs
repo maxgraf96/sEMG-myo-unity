@@ -20,9 +20,6 @@ public class ONNXInference : MonoBehaviour
 
     public class ThreadWork
     {
-        private static readonly int GPU_ID = 0;
-        // Start is called before the first frame update
-    
         private static InferenceSession session;
 
         private static Tensor<float> inputTensor;

@@ -14,7 +14,6 @@ public class OVRsEMGHandModifier : MonoBehaviour
 	// Make a float array to hold the Hu 2022 joint data
 	private float[] jointData = new float[MyoClassification.OUTPUT_DIM];
 	
-	private int counter = 0;
 	// Joint mappings from Hu 2022 dataset to Oculus SDK
 	private Dictionary<int, int> jointMappings = new()
 	{

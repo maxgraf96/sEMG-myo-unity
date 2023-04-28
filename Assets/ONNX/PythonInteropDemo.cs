@@ -1,59 +1,79 @@
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Text;
+using NetMQ;
+using NetMQ.Sockets;
 using Newtonsoft.Json;
 
 public class PythonInteropDemo
 {
-    private static Process process;
-
     public PythonInteropDemo()
     {
-        process = new Process
+        for(int i = 0; i < MyoClassification.INPUT_TENSOR_LEN; i++)
         {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = "C:\\Users\\Max\\PycharmProjects\\sEMG-unity-bridge\\venv\\Scripts\\python.exe", // Use "python3" on some Unix-based systems
-                Arguments = "C:\\Users\\Max\\PycharmProjects\\sEMG-unity-bridge\\data_processing.py",
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            }
-        };
-
-        process.Start();
+            outputHolder.Add(new float[MyoClassification.INPUT_DIM]);
+        }
         
-        // Make a 100x8 dummy array
-        float[] emg1D = new float[800];
-        for (int i = 0; i < 800; i++)
+        // Create a socket and connect it to the server
+        try
         {
-            emg1D[i] = i;
+            socket = new RequestSocket();
+            socket.Connect("tcp://localhost:5555");
+        }
+        catch (Exception e)
+        {
+            socket = null;
         }
     }
 
+    StringBuilder sb = new();
+    List<float[]> outputHolder = new();
+    private RequestSocket socket;
+
     public List<float[]> ProcessEMGData(float[] emg1D)
     {
-        var serialised = JsonConvert.SerializeObject(emg1D);
-
-        // Send the command to call the function
-        var input = "call_function|" + serialised;
-        process.StandardInput.WriteLine(input);
-
-        // Read the response from the Python script
-        string output = process.StandardOutput.ReadLine();
+        sb.Clear();
         
-        // Parse the string
-        var list = JsonConvert.DeserializeObject<List<float[]>>(output);
+        for (int i = 0; i < emg1D.Length; i++)
+        {
+            sb.Append(emg1D[i].ToString());
+            if (i < emg1D.Length - 1)
+            {
+                sb.Append(", ");
+            }
+        }
+        
+        socket.SendFrame(sb.ToString());
+        string output = socket.ReceiveFrameString();
 
-        return list;
+        // Parse the string
+        output = output.Replace("[", "").Replace("]", "");
+        string[] splitInput = output.Split(new[] { ", " }, StringSplitOptions.RemoveEmptyEntries);
+        
+        int index = 0;
+        int channel = 0;
+        for (int i = 0; i < splitInput.Length; i++)
+        {
+            if (float.TryParse(splitInput[i], out float floatValue))
+            {
+                outputHolder[index][channel] = floatValue;
+                channel++;
+                if (channel == MyoClassification.INPUT_DIM)
+                {
+                    channel = 0;
+                    index++;
+                }
+            }
+        }
+        
+        return outputHolder;
     }
 
     public void Quit()
     {
-        // Send the exit command to the Python script
-        process.StandardInput.WriteLine("exit");
-        // Wait for the Python process to finish and close it
-        process.WaitForExit();
-        process.Close();
+        if(socket == null) return;
+        // socket.SendFrame("exit");
+        socket.Dispose();
     }
 }

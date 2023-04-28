@@ -6,10 +6,12 @@ using System.Threading;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
+using ThreadPriority = System.Threading.ThreadPriority;
 
 public class MyoClassification : MonoBehaviour
 {
-    public static readonly int SEQ_LEN = 70;
+    public static readonly int SEQ_LEN = 100;
     public static readonly int FEATURE_LEN = 6;
     public static readonly int TGT_LEN = 1;
     public static readonly int INPUT_DIM = 8;
@@ -18,7 +20,7 @@ public class MyoClassification : MonoBehaviour
     
     public float[] resultValues = new float[8];
 
-    static ConcurrentQueue<float[][]> inputQ = new();
+    public static ConcurrentQueue<float[][]> inputQ = new();
     public static ConcurrentQueue<DenseTensor<float>> outputQ = new();
     static ConcurrentQueue<float> fpsQueue = new();
 
@@ -28,6 +30,7 @@ public class MyoClassification : MonoBehaviour
     {
         BetterStreamingAssets.Initialize();
         workThread = new Thread(ThreadWork.DoWork);
+        workThread.Priority = ThreadPriority.Highest;
         workThread.Start();
     }
 
@@ -54,7 +57,8 @@ public class MyoClassification : MonoBehaviour
         {
             if (fpsQueue.TryDequeue(out var fps))
             {
-                // Debug.Log("FPS: " + fps);
+                Debug.Log("FPS: " + fps);
+                Debug.Log("Input q lag:" + inputQ.Count);
             }
         }
     }

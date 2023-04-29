@@ -63,14 +63,14 @@ public class OVRsEMGHandModifier : MonoBehaviour
 			GetComponent<HandVisual>().Joints[mapping.Value].localRotation = Quaternion.Euler(0, 0, -rotationValue);
 		}
 
-		// foreach (var mapping in distalMappings)
-		// {
-		// 	var oculusSDKIdx = mapping.Key;
-		// 	var hu2022IntermediateIdx = mapping.Value;
-		// 	var intermediateRotationValue = Mathf.Abs(jointData[hu2022IntermediateIdx]);
-		// 	var distalRotationValue = 2f / 3f * intermediateRotationValue;
-		// 	GetComponent<HandVisual>().Joints[oculusSDKIdx].localRotation = Quaternion.Euler(0, 0, -distalRotationValue);
-		// }
+		foreach (var mapping in distalMappings)
+		{
+			var oculusSDKIdx = mapping.Key;
+			var hu2022IntermediateIdx = mapping.Value;
+			var intermediateRotationValue = Mathf.Abs(jointData[hu2022IntermediateIdx]);
+			var distalRotationValue = 1.5f / 3f * intermediateRotationValue;
+			GetComponent<HandVisual>().Joints[oculusSDKIdx].localRotation = Quaternion.Euler(0, 0, -distalRotationValue);
+		}
 	}
 
 	/// <summary>

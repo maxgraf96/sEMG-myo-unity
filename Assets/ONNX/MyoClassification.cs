@@ -11,7 +11,7 @@ using ThreadPriority = System.Threading.ThreadPriority;
 
 public class MyoClassification : MonoBehaviour
 {
-    public static readonly int SEQ_LEN = 100;
+    public static readonly int SEQ_LEN = 150;
     public static readonly int FEATURE_LEN = 6;
     public static readonly int TGT_LEN = 1;
     public static readonly int INPUT_DIM = 8;

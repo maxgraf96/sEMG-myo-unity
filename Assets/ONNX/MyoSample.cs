@@ -41,11 +41,6 @@ public class MyoSample : MonoBehaviour
     private int csvEMGDataCounter = 0;
     private int csvAngleDataCounter = 0;
 
-
-    private LowPassFilter lowPassFilterOutputAngles = new LowPassFilter(0.2f, 6);
-    Dictionary<int, List<float>> rawOutputAngles = new();
-    Dictionary<int, DiscreteSignal> filteredOutputAngles = new();
-
     enum  Mode
     {
         RealInference, // Myo EMG data
@@ -235,7 +230,7 @@ public class MyoSample : MonoBehaviour
                     return;
                 while(MyoReadWorker.myoInputQ.TryDequeue(out var newSample))
                 {
-                    GetComponent<Finetuning>().AddReadings(newSample, lastOVRReading);
+                    // GetComponent<Finetuning>().AddReadings(newSample, lastOVRReading);
                     Interlocked.Decrement(ref MyoReadWorker.myoInputQCount);
                 }
                 break;
@@ -246,8 +241,6 @@ public class MyoSample : MonoBehaviour
     {
         HandleOutputQueue();
     }
-
-    private int warmupCounter = 0;
 
     private void HandleOutputQueue()
     {
@@ -260,49 +253,15 @@ public class MyoSample : MonoBehaviour
                 var value = outputTensor[0, MyoClassification.TGT_LEN - 1, i];
                 resultValues[i] = value;
             }
-            
-            // Add to discrete signal
-            if (rawOutputAngles.Count == 0)
-            {
-                for (int i = 0; i < 8; i++)
-                {
-                    rawOutputAngles.Add(i, new List<float>());
-                    filteredOutputAngles.Add(i, new DiscreteSignal(100, new float[MyoClassification.SEQ_LEN]));
-                }
-            }
-            
-            // Add results to raw samples
-            for (int i = 0; i < 8; i++)
-            {
-                rawOutputAngles[i].Add(resultValues[i]);
-                if (rawOutputAngles[i].Count > MyoClassification.SEQ_LEN)
-                    rawOutputAngles[i].RemoveAt(0);
-            }
-            warmupCounter += 1;
-            if (warmupCounter < MyoClassification.SEQ_LEN)
+
+            var filteredOutputAngles = AnglePostprocessor.PostProcessAngles(resultValues);
+            if(filteredOutputAngles == null)
                 continue;
             
-            // Convert raw samples to discrete signal
-            foreach (var jointIndex in rawOutputAngles.Keys)
-            {
-                for (int i = 0; i < MyoClassification.SEQ_LEN; i++)
-                {
-                    filteredOutputAngles[jointIndex].Samples[i] = rawOutputAngles[jointIndex][i];
-                }
-                var filteredSignal = lowPassFilterOutputAngles.ApplyTo(filteredOutputAngles[jointIndex]);
-                filteredOutputAngles[jointIndex] = filteredSignal;
-            }
-            
-            // Get last 8 samples from filteredSignals
-            for (int i = 0; i < MyoClassification.OUTPUT_DIM; i++)
-            {
-                resultValues[i] = filteredOutputAngles[i].Samples[^1];
-            }
-        
-            _visHandModifierR.UpdateJointData(resultValues);
+            _visHandModifierR.UpdateJointData(filteredOutputAngles);
             
             if(_realHandModifierR.enabled)
-                _realHandModifierR.UpdateJointData(resultValues);
+                _realHandModifierR.UpdateJointData(filteredOutputAngles);
         }
     }
 
@@ -403,9 +362,7 @@ public class MyoSample : MonoBehaviour
             isSiminferenceGT = !isSiminferenceGT;
             
             MyoClassification.outputQ.Clear();
-            rawOutputAngles.Clear();
-            filteredOutputAngles.Clear();
-            warmupCounter = 0;
+            AnglePostprocessor.ResetPostprocessor();
 
             if(isSiminferenceGT)
                 csvAngleDataCounter = 0;

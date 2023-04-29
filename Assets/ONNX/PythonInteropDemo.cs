@@ -10,6 +10,9 @@ public class PythonInteropDemo
 {
     public PythonInteropDemo()
     {
+        AsyncIO.ForceDotNet.Force();
+        NetMQConfig.Linger = new TimeSpan(0,0,1);
+        
         for(int i = 0; i < MyoClassification.INPUT_TENSOR_LEN; i++)
         {
             outputHolder.Add(new float[MyoClassification.INPUT_DIM]);
@@ -75,5 +78,6 @@ public class PythonInteropDemo
         if(socket == null) return;
         // socket.SendFrame("exit");
         socket.Dispose();
+        NetMQConfig.Cleanup(false);
     }
 }

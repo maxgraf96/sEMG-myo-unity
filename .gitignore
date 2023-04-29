@@ -11,6 +11,8 @@
 *.ort
 *.ort.meta
 
+Assets/ThirdParty/Ultraleap/*
+
 Assets/Oculus
 
 # Mine

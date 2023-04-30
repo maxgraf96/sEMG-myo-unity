@@ -93,7 +93,8 @@ public class Finetuning : MonoBehaviour
                     angle = -360 + angle;
                 angleReading[counter] = angle;
                 counter++;
-                print(angle);
+                if(i == 6)
+                    print("Oculus index finger proximal rotation: " + angle);
             }
         }
         

@@ -7,12 +7,11 @@ using UnityEngine;
 public class LeapMotionReceiver : MonoBehaviour
 {
     public LeapProvider leapProvider;
-    private float[] lastLeapReading;
+    private static float[] lastLeapReading = new float[8];
 
     private void OnEnable()
     {
         leapProvider.OnUpdateFrame += OnUpdateFrame;
-        lastLeapReading = new float[8];
     }
     private void OnDisable()
     {
@@ -71,8 +70,14 @@ public class LeapMotionReceiver : MonoBehaviour
                 }
             }
             
-            print("Last leap reading is: " + lastLeapReading[0] + ", " + lastLeapReading[1] + ", " + lastLeapReading[2] + ", " + lastLeapReading[3] + ", " + lastLeapReading[4] + ", " + lastLeapReading[5] + ", " + lastLeapReading[6] + ", " + lastLeapReading[7]);
+            // print("Last leap reading is: " + lastLeapReading[0] + ", " + lastLeapReading[1] + ", " + lastLeapReading[2] + ", " + lastLeapReading[3] + ", " + lastLeapReading[4] + ", " + lastLeapReading[5] + ", " + lastLeapReading[6] + ", " + lastLeapReading[7]);
             
         }
+    }
+
+    public static float[] GetLastLeapReading()
+    {
+        var reading = new[] {lastLeapReading[0], lastLeapReading[1], lastLeapReading[2], lastLeapReading[3], lastLeapReading[4], lastLeapReading[5], lastLeapReading[6], lastLeapReading[7]};
+        return reading;
     }
 }

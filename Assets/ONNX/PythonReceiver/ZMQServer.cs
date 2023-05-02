@@ -6,14 +6,17 @@ using System.Threading.Tasks;
 using NetMQ;
 using NetMQ.Sockets;
 using ONNX;
+using ONNX.PythonReceiver;
 using UnityEngine;
 
 public class ZMQServer : MonoBehaviour
 {
     private ResponseSocket server;
     static ConcurrentQueue<int> queue = new();
-    
-    public bool isModeRecording;
+
+    public enum Mode { Recording, Inference, Experiment };
+
+    public Mode mode;
     
     private Finetuning _finetuning;
     public OVRsEMGHandModifier _visHandModifierR;
@@ -54,12 +57,12 @@ public class ZMQServer : MonoBehaviour
                     var floatArray = UnpackFloatArray(packedData);
                     
                     // -------------------------------- Recording mode --------------------------------
-                    if (isModeRecording && _finetuning.IsRecording())
+                    if (mode is Mode.Recording && _finetuning.IsRecording())
                     {
                         _finetuning.AddReadings(floatArray);
                     }
                     // -------------------------------- Inference mode --------------------------------
-                    else
+                    else if(mode is Mode.Inference or Mode.Experiment)
                     {
                         // Inference mode
                         // Convert the float array into a list of lists
@@ -72,6 +75,11 @@ public class ZMQServer : MonoBehaviour
                             _visHandModifierR.UpdateJointData(filteredOutputAngles);
                             if(_realHandModifierR.enabled)
                                 _realHandModifierR.UpdateJointData(filteredOutputAngles);
+                        }
+
+                        if (mode == Mode.Experiment)
+                        {
+                            ComparisonExperiment.AddReadings(filteredOutputAngles);
                         }
                     }
                     continue;

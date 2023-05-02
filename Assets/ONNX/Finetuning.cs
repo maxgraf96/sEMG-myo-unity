@@ -9,7 +9,7 @@ public class Finetuning : MonoBehaviour
     private List<float[]> emgReadings = new();
     private List<float[]> fingerJointReadings = new();
     private bool isRecording = false;
-    private float[] lastOVRReading;
+    private static float[] lastOVRReading;
     public Transform OculusHandR;
 
     private void Start()
@@ -93,8 +93,6 @@ public class Finetuning : MonoBehaviour
                     angle = -360 + angle;
                 angleReading[counter] = angle;
                 counter++;
-                if(i == 6)
-                    print("Oculus index finger proximal rotation: " + angle);
             }
         }
         
@@ -128,5 +126,16 @@ public class Finetuning : MonoBehaviour
     public bool IsRecording()
     {
         return isRecording;
+    }
+    
+    public static float[] GetLastOVRReadingForExperiment()
+    {
+        // Only return the 8 finger joint angles
+        var reading = new float[MyoClassification.OUTPUT_DIM];
+        for (int i = 0; i < MyoClassification.OUTPUT_DIM; i++)
+        {
+            reading[i] = lastOVRReading[i];
+        }
+        return reading;
     }
 }

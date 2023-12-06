@@ -1,10 +1,17 @@
+
 # Multimodal Hand Tracking for Extended Reality Musical Instruments (Unity Implementation)
 
 ## Overview
 
 This repository contains the Unity implementation of the multimodal XR Hand Tracking system for Extended Reality Musical Instruments (XRMIs), as described in our research paper "Combining Vision and EMG-Based Hand Tracking for Extended Reality Musical Instruments". This system integrates vision-based hand tracking with a deep learning model based on EMG data to provide enhanced hand tracking in XR environments, specifically designed for musical applications.
+This project consists of three parts:
+1. This repo - the Unity implementation. It acts as a receiver of sEMG data from a Python application and is responsible for processing and rendering finger joint angle data.
+2. A "Unity bridge" app for streaming sEMG data to Unity. This Python app receives sEMG data from the Myo armband, preprocesses it and sends it to Unity.
+3. A Python project containing the training data and code that produces the deep learning model used in this project.
 
-Note: The Python project for training the deep learning model can be found [here](https://github.com/maxgraf96/sEMG-myo-python).
+Note: The Unity bridge app for streaming sEMG data to Unity can be found [here](https://github.com/maxgraf96/sEMG-unity-bridge).
+
+Note 2: The Python project for training the deep learning model can be found [here](https://github.com/maxgraf96/sEMG-myo-python).
 
 ## Features
 
@@ -35,10 +42,10 @@ Note: The Python project for training the deep learning model can be found [here
 
 (Optional): If you want to train the model yourself follow the instructions to set up the [Python model project](https://github.com/maxgraf96/sEMG-myo-python).
 
-- Todo: Python local sEMG streaming app description.
+- Set up the Python local sEMG streaming app (see https://github.com/maxgraf96/sEMG-unity-bridge).
 - Open the `QuestPythonReceiverScene`.
 - In the scene outline, select the `Scripts` GameObject and under the `ZMQ Server` MonoBehaviour set the Mode to `Inference`.
-- Put on your Myo armband and connect it to the Python app.
+- Put on your Myo armband, connect it to your PC and run the Unity bridge app.
 - Make sure your XR headset is connected to your PC and the Oculus app is open.
 - Press play in the Unity Editor.
 
